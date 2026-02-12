@@ -22,7 +22,7 @@ const FileComplaint = ({ user, token }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch('http://localhost:3001/api/complaints', {
+      const res = await fetch('/api/complaints', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

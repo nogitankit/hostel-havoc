@@ -10,7 +10,7 @@ const StatusCheck = ({ user, token }) => {
 
   const fetchData = async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/complaints', {
+      const res = await fetch('/api/complaints', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
@@ -28,7 +28,7 @@ const StatusCheck = ({ user, token }) => {
   const handleUpvote = async (id, e) => {
     e.stopPropagation();
     try {
-      const res = await fetch(`http://localhost:3001/api/complaints/${id}/upvote`, {
+      const res = await fetch(`/api/complaints/${id}/upvote`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -41,7 +41,7 @@ const StatusCheck = ({ user, token }) => {
   const handleUpdateStatus = async (id, newStatus, e) => {
     e.stopPropagation();
     try {
-      const res = await fetch(`http://localhost:3001/api/complaints/${id}/status`, {
+      const res = await fetch(`/api/complaints/${id}/status`, {
         method: 'PATCH',
         headers: { 
           'Content-Type': 'application/json',

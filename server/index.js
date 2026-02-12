@@ -44,8 +44,8 @@ app.post('/api/register', async (req, res) => {
   const db = await dbPromise;
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
-    await db.run(
-      'INSERT INTO users (username, password, room_number) VALUES (?, ?, ?)',
+    await db.query(
+      'INSERT INTO users (username, password, room_number) VALUES ($1, $2, $3)',
       [username, hashedPassword, room_number]
     );
     res.status(201).json({ message: 'User registered' });
@@ -57,7 +57,8 @@ app.post('/api/register', async (req, res) => {
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
   const db = await dbPromise;
-  const user = await db.get('SELECT * FROM users WHERE username = ?', [username]);
+  const result = await db.query('SELECT * FROM users WHERE username = $1', [username]);
+  const user = result.rows[0];
 
   if (user && await bcrypt.compare(password, user.password)) {
     const token = jwt.sign(
@@ -75,14 +76,14 @@ app.post('/api/login', async (req, res) => {
 app.get('/api/users', authenticateToken, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
   const db = await dbPromise;
-  const users = await db.all('SELECT id, username, room_number, role FROM users WHERE username != "admin"');
-  res.json(users);
+  const result = await db.query('SELECT id, username, room_number, role FROM users WHERE username != \'admin\'');
+  res.json(result.rows);
 });
 
 app.delete('/api/users/:id', authenticateToken, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
   const db = await dbPromise;
-  await db.run('DELETE FROM users WHERE id = ?', [req.params.id]);
+  await db.query('DELETE FROM users WHERE id = $1', [req.params.id]);
   res.json({ message: 'User removed' });
 });
 
@@ -90,17 +91,20 @@ app.delete('/api/users/:id', authenticateToken, async (req, res) => {
 
 app.get('/api/complaints', authenticateToken, async (req, res) => {
   const db = await dbPromise;
-  const complaints = await db.all(`
+  const result = await db.query(`
     SELECT c.*, u.username, 
     (SELECT COUNT(*) FROM upvotes WHERE complaint_id = c.id) as upvotes,
-    (SELECT 1 FROM upvotes WHERE complaint_id = c.id AND user_id = ?) as has_upvoted
+    (SELECT 1 FROM upvotes WHERE complaint_id = c.id AND user_id = $1) as has_upvoted
     FROM complaints c
     JOIN users u ON c.user_id = u.id
     ORDER BY c.created_at DESC
   `, [req.user.id]);
 
+  const complaints = result.rows;
   const sanitized = complaints.map(c => ({
     ...c,
+    upvotes: parseInt(c.upvotes),
+    has_upvoted: !!c.has_upvoted,
     room_number: (c.is_anonymous && req.user.role !== 'admin') ? 'ANON' : c.room_number
   }));
 
@@ -111,9 +115,9 @@ app.post('/api/complaints', authenticateToken, async (req, res) => {
   const { category, title, description, severity, is_anonymous } = req.body;
   const db = await dbPromise;
   
-  await db.run(
-    'INSERT INTO complaints (user_id, room_number, category, title, description, severity, is_anonymous) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [req.user.id, req.user.room_number, category, title, description, severity, is_anonymous ? 1 : 0]
+  await db.query(
+    'INSERT INTO complaints (user_id, room_number, category, title, description, severity, is_anonymous) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+    [req.user.id, req.user.room_number, category, title, description, severity, is_anonymous || false]
   );
   
   res.status(201).json({ message: 'Complaint filed' });
@@ -126,8 +130,8 @@ app.patch('/api/complaints/:id/status', authenticateToken, async (req, res) => {
   const db = await dbPromise;
   const completed_at = status === 'Completed' ? new Date().toISOString() : null;
 
-  await db.run(
-    'UPDATE complaints SET status = ?, completed_at = ? WHERE id = ?',
+  await db.query(
+    'UPDATE complaints SET status = $1, completed_at = $2 WHERE id = $3',
     [status, completed_at, req.params.id]
   );
   
@@ -137,8 +141,8 @@ app.patch('/api/complaints/:id/status', authenticateToken, async (req, res) => {
 app.post('/api/complaints/:id/upvote', authenticateToken, async (req, res) => {
   const db = await dbPromise;
   try {
-    await db.run(
-      'INSERT INTO upvotes (user_id, complaint_id) VALUES (?, ?)',
+    await db.query(
+      'INSERT INTO upvotes (user_id, complaint_id) VALUES ($1, $2)',
       [req.user.id, req.params.id]
     );
     res.json({ message: 'Upvoted' });
@@ -150,11 +154,12 @@ app.post('/api/complaints/:id/upvote', authenticateToken, async (req, res) => {
 app.get('/api/stats', authenticateToken, async (req, res) => {
   const db = await dbPromise;
   
-  const activeCount = await db.get("SELECT COUNT(*) as count FROM complaints WHERE status = 'Pending'");
-  const completed7d = await db.get("SELECT COUNT(*) as count FROM complaints WHERE status = 'Completed' AND completed_at > datetime('now', '-7 days')");
+  const activeCountRes = await db.query("SELECT COUNT(*) as count FROM complaints WHERE status = 'Pending'");
+  const completed7dRes = await db.query("SELECT COUNT(*) as count FROM complaints WHERE status = 'Completed' AND completed_at > NOW() - INTERVAL '7 days'");
   
   // Shame counter: Days since last EMERGENCY completed
-  const lastEmergency = await db.get("SELECT completed_at FROM complaints WHERE severity = 'EMERGENCY' AND status = 'Completed' ORDER BY completed_at DESC LIMIT 1");
+  const lastEmergencyRes = await db.query("SELECT completed_at FROM complaints WHERE severity = 'EMERGENCY' AND status = 'Completed' ORDER BY completed_at DESC LIMIT 1");
+  const lastEmergency = lastEmergencyRes.rows[0];
   
   let daysSince = 0;
   if (lastEmergency && lastEmergency.completed_at) {
@@ -162,28 +167,44 @@ app.get('/api/stats', authenticateToken, async (req, res) => {
     daysSince = Math.floor(diffTime / (1000 * 60 * 60 * 24));
   } else {
     // If no emergency ever completed, count since first emergency or just a high number/0
-    const firstEmergency = await db.get("SELECT created_at FROM complaints WHERE severity = 'EMERGENCY' ORDER BY created_at ASC LIMIT 1");
+    const firstEmergencyRes = await db.query("SELECT created_at FROM complaints WHERE severity = 'EMERGENCY' ORDER BY created_at ASC LIMIT 1");
+    const firstEmergency = firstEmergencyRes.rows[0];
     if (firstEmergency) {
       const diffTime = Math.abs(new Date() - new Date(firstEmergency.created_at));
       daysSince = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     }
   }
 
-  const recent = await db.all(`
+  const recentRes = await db.query(`
     SELECT c.*, (SELECT COUNT(*) FROM upvotes WHERE complaint_id = c.id) as upvotes 
     FROM complaints c 
     ORDER BY created_at DESC LIMIT 5
   `);
 
   res.json({
-    activeIssues: activeCount.count,
-    completedLastWeek: completed7d.count,
+    activeIssues: parseInt(activeCountRes.rows[0].count),
+    completedLastWeek: parseInt(completed7dRes.rows[0].count),
     shameDays: daysSince,
-    recent: recent.map(c => ({
+    recent: recentRes.rows.map(c => ({
       ...c,
+      upvotes: parseInt(c.upvotes),
       room_number: (c.is_anonymous && req.user.role !== 'admin') ? 'ANON' : c.room_number
     }))
   });
+});
+
+// Serve static files from the React app
+app.use(express.static(path.join(__dirname, '../dist')));
+
+// The "catchall" handler: for any request that doesn't
+// match one above, send back React's index.html file.
+app.use((req, res, next) => {
+  // Only serve index.html if the request is not for an API route
+  // and it is a GET request
+  if (req.method === 'GET' && !req.path.startsWith('/api')) {
+    return res.sendFile(path.join(__dirname, '../dist/index.html'));
+  }
+  next();
 });
 
 initDb().then(() => {

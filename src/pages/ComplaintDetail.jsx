@@ -11,7 +11,7 @@ const ComplaintDetail = ({ user, token }) => {
   const fetchData = async () => {
     try {
       // For simplicity, we filter from the main list, but a dedicated GET /api/complaints/:id would be better
-      const res = await fetch('http://localhost:3001/api/complaints', {
+      const res = await fetch('/api/complaints', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
@@ -29,7 +29,7 @@ const ComplaintDetail = ({ user, token }) => {
 
   const handleUpdateStatus = async (newStatus) => {
     try {
-      const res = await fetch(`http://localhost:3001/api/complaints/${id}/status`, {
+      const res = await fetch(`/api/complaints/${id}/status`, {
         method: 'PATCH',
         headers: { 
           'Content-Type': 'application/json',
@@ -45,7 +45,7 @@ const ComplaintDetail = ({ user, token }) => {
 
   const handleUpvote = async () => {
     try {
-      const res = await fetch(`http://localhost:3001/api/complaints/${id}/upvote`, {
+      const res = await fetch(`/api/complaints/${id}/upvote`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });

@@ -8,7 +8,7 @@ const Dashboard = ({ user, token }) => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetch('http://localhost:3001/api/stats', {
+    fetch('/api/stats', {
       headers: { 'Authorization': `Bearer ${token}` }
     })
     .then(res => res.json())

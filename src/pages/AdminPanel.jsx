@@ -14,7 +14,7 @@ const AdminPanel = ({ token }) => {
 
   const fetchUsers = async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/users', {
+      const res = await fetch('/api/users', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
@@ -33,7 +33,7 @@ const AdminPanel = ({ token }) => {
     e.preventDefault();
     setMsg({ type: '', text: '' });
     try {
-      const res = await fetch('http://localhost:3001/api/register', {
+      const res = await fetch('/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
@@ -54,7 +54,7 @@ const AdminPanel = ({ token }) => {
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to remove this resident?')) return;
     try {
-      const res = await fetch(`http://localhost:3001/api/users/${id}`, {
+      const res = await fetch(`/api/users/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });

@@ -16,7 +16,7 @@ const Login = ({ onLogin }) => {
     const endpoint = isRegister ? '/api/register' : '/api/login';
     
     try {
-      const res = await fetch(`http://localhost:3001${endpoint}`, {
+      const res = await fetch(`${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
